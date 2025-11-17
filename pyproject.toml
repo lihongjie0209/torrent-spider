@@ -1,0 +1,24 @@
+[project]
+name = "torrent-spider"
+version = "1.0.0"
+description = "Distributed torrent spider system"
+requires-python = ">=3.11"
+dependencies = [
+    "kafka-python==2.0.2",
+    "redis==5.0.1",
+]
+
+[project.optional-dependencies]
+hash-collector = [
+    "libtorrent==2.0.11",
+]
+metadata-collector = [
+    "libtorrent==2.0.11",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["shared"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
