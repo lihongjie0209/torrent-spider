@@ -109,6 +109,222 @@ services:
       - torrent-spider-net
     restart: unless-stopped
 
+  hash-collector-2:
+    build:
+      context: .
+      dockerfile: hash-collector/Dockerfile
+    container_name: hash-collector-2
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC_HASHES=torrent-hashes
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LOG_LEVEL=INFO
+      - DHT_PORT=6882
+    ports:
+      - "6882:6882/udp"
+      - "6882:6882/tcp"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - torrent-spider-net
+    restart: unless-stopped
+
+  hash-collector-3:
+    build:
+      context: .
+      dockerfile: hash-collector/Dockerfile
+    container_name: hash-collector-3
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC_HASHES=torrent-hashes
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LOG_LEVEL=INFO
+      - DHT_PORT=6886
+    ports:
+      - "6886:6886/udp"
+      - "6886:6886/tcp"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - torrent-spider-net
+    restart: unless-stopped
+
+  hash-collector-4:
+    build:
+      context: .
+      dockerfile: hash-collector/Dockerfile
+    container_name: hash-collector-4
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC_HASHES=torrent-hashes
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LOG_LEVEL=INFO
+      - DHT_PORT=6887
+    ports:
+      - "6887:6887/udp"
+      - "6887:6887/tcp"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - torrent-spider-net
+    restart: unless-stopped
+
+  hash-collector-5:
+    build:
+      context: .
+      dockerfile: hash-collector/Dockerfile
+    container_name: hash-collector-5
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC_HASHES=torrent-hashes
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LOG_LEVEL=INFO
+      - DHT_PORT=6888
+    ports:
+      - "6888:6888/udp"
+      - "6888:6888/tcp"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - torrent-spider-net
+    restart: unless-stopped
+
+  hash-collector-6:
+    build:
+      context: .
+      dockerfile: hash-collector/Dockerfile
+    container_name: hash-collector-6
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC_HASHES=torrent-hashes
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LOG_LEVEL=INFO
+      - DHT_PORT=6889
+    ports:
+      - "6889:6889/udp"
+      - "6889:6889/tcp"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - torrent-spider-net
+    restart: unless-stopped
+
+  hash-collector-7:
+    build:
+      context: .
+      dockerfile: hash-collector/Dockerfile
+    container_name: hash-collector-7
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC_HASHES=torrent-hashes
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LOG_LEVEL=INFO
+      - DHT_PORT=6890
+    ports:
+      - "6890:6890/udp"
+      - "6890:6890/tcp"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - torrent-spider-net
+    restart: unless-stopped
+
+  hash-collector-8:
+    build:
+      context: .
+      dockerfile: hash-collector/Dockerfile
+    container_name: hash-collector-8
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC_HASHES=torrent-hashes
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LOG_LEVEL=INFO
+      - DHT_PORT=6891
+    ports:
+      - "6891:6891/udp"
+      - "6891:6891/tcp"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - torrent-spider-net
+    restart: unless-stopped
+
+  hash-collector-9:
+    build:
+      context: .
+      dockerfile: hash-collector/Dockerfile
+    container_name: hash-collector-9
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC_HASHES=torrent-hashes
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LOG_LEVEL=INFO
+      - DHT_PORT=6892
+    ports:
+      - "6892:6892/udp"
+      - "6892:6892/tcp"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - torrent-spider-net
+    restart: unless-stopped
+
+  hash-collector-10:
+    build:
+      context: .
+      dockerfile: hash-collector/Dockerfile
+    container_name: hash-collector-10
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC_HASHES=torrent-hashes
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LOG_LEVEL=INFO
+      - DHT_PORT=6893
+    ports:
+      - "6893:6893/udp"
+      - "6893:6893/tcp"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - torrent-spider-net
+    restart: unless-stopped
+
   # Metadata Collector - Multiple instances
   metadata-collector-1:
     build:
