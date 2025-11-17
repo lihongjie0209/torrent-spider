@@ -4,6 +4,8 @@ import sys
 import os
 import logging
 import time
+import random
+import threading
 import libtorrent as lt
 from datetime import datetime
 
@@ -29,6 +31,8 @@ class HashCollector:
         self.session = None
         self.kafka_producer = None
         self.dht_port = Config.HASH_COLLECTOR_DHT_PORT
+        self.active_search_thread = None
+        self.stop_active_search = False
         
     def setup_session(self):
         """Initialize libtorrent session with DHT enabled."""
@@ -75,6 +79,53 @@ class HashCollector:
         logger.info("Connecting to Kafka...")
         self.kafka_producer = KafkaProducerClient()
     
+    def active_dht_search(self):
+        """
+        Strategy 3: Active DHT traversal by continuously querying random info_hashes.
+        This forces libtorrent to contact thousands of nodes, making our routing table huge and active.
+        Runs in a background thread.
+        """
+        logger.info("Starting active DHT search thread (Strategy 3)")
+        query_count = 0
+        
+        while not self.stop_active_search:
+            try:
+                # Generate a random 20-byte info_hash
+                random_bytes = bytes([random.randint(0, 255) for _ in range(20)])
+                random_hash = lt.sha1_hash(random_bytes)
+                
+                # Trigger DHT traversal by querying this random hash
+                # libtorrent will automatically do find_node queries to locate it
+                self.session.dht_get_peers(random_hash)
+                
+                query_count += 1
+                
+                # Log progress every 1000 queries
+                if query_count % 1000 == 0:
+                    logger.info(f"Active search: {query_count} random queries sent")
+                
+                # Small delay to prevent overwhelming the system
+                # 0.1 second = 10 queries/second = 600/minute = 36,000/hour
+                time.sleep(0.1)
+                
+            except Exception as e:
+                logger.error(f"Error in active DHT search: {e}", exc_info=True)
+                time.sleep(1)  # Back off on error
+        
+        logger.info(f"Active DHT search thread stopped. Total queries: {query_count}")
+    
+    def start_active_search(self):
+        """Start the active DHT search thread."""
+        if self.active_search_thread is None or not self.active_search_thread.is_alive():
+            self.stop_active_search = False
+            self.active_search_thread = threading.Thread(
+                target=self.active_dht_search,
+                daemon=True,
+                name="ActiveDHTSearch"
+            )
+            self.active_search_thread.start()
+            logger.info("Active DHT search thread started")
+    
     def run(self):
         """Main collection loop."""
         logger.info("Starting hash collection...")
@@ -87,6 +138,7 @@ class HashCollector:
             last_status_time = time.time()
             last_bootstrap_check = time.time()
             dht_bootstrapped = False
+            active_search_started = False
             
             while True:
                 # Check for alerts from libtorrent
@@ -161,6 +213,12 @@ class HashCollector:
                         logger.info(f"DHT now has {dht_nodes} nodes!")
                         dht_bootstrapped = True
                     
+                    # Start active search once DHT is bootstrapped
+                    if dht_bootstrapped and not active_search_started:
+                        logger.info("DHT bootstrapped - starting active search strategy")
+                        self.start_active_search()
+                        active_search_started = True
+                    
                     last_bootstrap_check = current_time
                 
                 # Log status periodically (every 60 seconds for better monitoring)
@@ -186,6 +244,13 @@ class HashCollector:
     def cleanup(self):
         """Clean up resources."""
         logger.info("Cleaning up resources...")
+        
+        # Stop active search thread
+        self.stop_active_search = True
+        if self.active_search_thread and self.active_search_thread.is_alive():
+            logger.info("Waiting for active search thread to stop...")
+            self.active_search_thread.join(timeout=5)
+        
         if self.session:
             self.session.pause()
         if self.kafka_producer:
