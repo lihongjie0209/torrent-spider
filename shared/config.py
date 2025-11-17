@@ -31,7 +31,11 @@ class Config:
     HASH_COLLECTOR_DHT_PORT: int = int(os.getenv("DHT_PORT", "6881"))
     METADATA_COLLECTOR_PORT: int = int(os.getenv("METADATA_PORT", "6882"))
     METADATA_COLLECTOR_TIMEOUT: int = int(os.getenv("METADATA_TIMEOUT", "60"))
-    STORAGE_DB_PATH: str = os.getenv("STORAGE_DB_PATH", "/data/torrents.db")
+    
+    # Meilisearch configuration
+    MEILISEARCH_URL: str = os.getenv("MEILISEARCH_URL", "http://meilisearch:7700")
+    MEILISEARCH_API_KEY: Optional[str] = os.getenv("MEILISEARCH_API_KEY")
+    MEILISEARCH_INDEX: str = os.getenv("MEILISEARCH_INDEX", "torrents")
     
     @classmethod
     def get_redis_url(cls) -> str:

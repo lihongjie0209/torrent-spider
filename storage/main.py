@@ -1,4 +1,4 @@
-"""Storage module - Persists torrent metadata to SQLite."""
+"""Storage module - Persists torrent metadata to Meilisearch."""
 
 import sys
 import os
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class StorageService:
-    """Stores torrent metadata in SQLite with Redis deduplication."""
+    """Stores torrent metadata in Meilisearch with Redis deduplication."""
     
     def __init__(self):
         self.database = None
@@ -32,13 +32,14 @@ class StorageService:
         self.duplicate_count = 0
     
     def setup_database(self):
-        """Initialize SQLite database."""
-        logger.info(f"Initializing database at {Config.STORAGE_DB_PATH}")
+        """Initialize Meilisearch database."""
+        logger.info(f"Initializing Meilisearch at {Config.MEILISEARCH_URL}")
         
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(Config.STORAGE_DB_PATH), exist_ok=True)
-        
-        self.database = TorrentDatabase(Config.STORAGE_DB_PATH)
+        self.database = TorrentDatabase(
+            url=Config.MEILISEARCH_URL,
+            api_key=Config.MEILISEARCH_API_KEY,
+            index_name=Config.MEILISEARCH_INDEX
+        )
     
     def setup_redis(self):
         """Initialize Redis connection for deduplication."""
@@ -204,7 +205,8 @@ def main():
     logger.info("Storage Service Starting")
     logger.info(f"Kafka: {Config.KAFKA_BOOTSTRAP_SERVERS}")
     logger.info(f"Source Topic: {Config.KAFKA_TOPIC_METADATA}")
-    logger.info(f"Database: {Config.STORAGE_DB_PATH}")
+    logger.info(f"Meilisearch: {Config.MEILISEARCH_URL}")
+    logger.info(f"Meilisearch Index: {Config.MEILISEARCH_INDEX}")
     logger.info(f"Redis: {Config.REDIS_HOST}:{Config.REDIS_PORT}")
     logger.info("=" * 60)
     

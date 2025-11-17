@@ -46,6 +46,44 @@ services:
       timeout: 5s
       retries: 5
 
+  # Meilisearch for torrent metadata storage
+  meilisearch:
+    image: getmeili/meilisearch:v1.6
+    container_name: meilisearch
+    ports:
+      - "7700:7700"
+    environment:
+      - MEILI_ENV=production
+      - MEILI_MASTER_KEY=torrentSpiderMasterKey2024
+      - MEILI_NO_ANALYTICS=true
+    volumes:
+      - meilisearch-data:/meili_data
+    networks:
+      - torrent-spider-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:7700/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # Meilisearch Web UI (Mini Dashboard)
+  meilisearch-ui:
+    image: riccoxie/meilisearch-ui:latest
+    container_name: meilisearch-ui
+    ports:
+      - "24900:24900"
+    environment:
+      - MEILISEARCH_URL=http://meilisearch:7700
+      - MEILISEARCH_API_KEY=torrentSpiderMasterKey2024
+    depends_on:
+      meilisearch:
+        condition: service_healthy
+    networks:
+      - torrent-spider-net
+    restart: unless-stopped
+
   # Hash Collector - Multiple instances
   hash-collector-1:
     build:
@@ -162,13 +200,15 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - LOG_LEVEL=INFO
-      - STORAGE_DB_PATH=/data/torrents.db
-    volumes:
-      - storage-data:/data
+      - MEILISEARCH_URL=http://meilisearch:7700
+      - MEILISEARCH_API_KEY=torrentSpiderMasterKey2024
+      - MEILISEARCH_INDEX=torrents
     depends_on:
       kafka:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      meilisearch:
         condition: service_healthy
     networks:
       - torrent-spider-net
@@ -182,3 +222,4 @@ volumes:
   kafka-data:
   redis-data:
   storage-data:
+  meilisearch-data:

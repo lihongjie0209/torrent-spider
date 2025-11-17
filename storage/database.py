@@ -1,86 +1,127 @@
-"""Database module for SQLite storage."""
+"""Database module for Meilisearch storage."""
 
-import sqlite3
+import meilisearch
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Set
 from datetime import datetime
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 
 class TorrentDatabase:
-    """SQLite database manager for torrent metadata."""
+    """Meilisearch database manager for torrent metadata."""
     
-    def __init__(self, db_path: str):
-        self.db_path = db_path
-        self.conn = None
+    def __init__(self, url: str, api_key: Optional[str], index_name: str):
+        self.url = url
+        self.api_key = api_key
+        self.index_name = index_name
+        self.client = None
+        self.index = None
         self.init_database()
     
     def init_database(self):
-        """Initialize database connection and create tables."""
+        """Initialize Meilisearch client and index."""
         try:
-            self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
-            self.conn.row_factory = sqlite3.Row
-            self.create_tables()
-            logger.info(f"Database initialized at {self.db_path}")
+            self.client = meilisearch.Client(self.url, self.api_key)
+            
+            # Create or get index
+            try:
+                self.index = self.client.get_index(self.index_name)
+                logger.info(f"Connected to existing index: {self.index_name}")
+            except meilisearch.errors.MeilisearchApiError:
+                # Index doesn't exist, create it
+                task = self.client.create_index(self.index_name, {'primaryKey': 'info_hash'})
+                self.client.wait_for_task(task.task_uid)
+                self.index = self.client.get_index(self.index_name)
+                logger.info(f"Created new index: {self.index_name}")
+            
+            self.configure_index()
+            logger.info(f"Meilisearch initialized at {self.url}")
+            
         except Exception as e:
-            logger.error(f"Failed to initialize database: {e}", exc_info=True)
+            logger.error(f"Failed to initialize Meilisearch: {e}", exc_info=True)
             raise
     
-    def create_tables(self):
-        """Create necessary tables if they don't exist."""
+    def configure_index(self):
+        """Configure index settings for optimal search."""
         try:
-            cursor = self.conn.cursor()
+            # Configure searchable attributes
+            self.index.update_searchable_attributes([
+                'name',
+                'info_hash',
+                'files.path',
+                'directories',
+                'comment'
+            ])
             
-            # Torrents table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS torrents (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    info_hash TEXT UNIQUE NOT NULL,
-                    name TEXT NOT NULL,
-                    total_size INTEGER NOT NULL,
-                    piece_length INTEGER,
-                    num_pieces INTEGER,
-                    comment TEXT,
-                    created_date TEXT,
-                    collected_at TEXT NOT NULL,
-                    inserted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+            # Configure filterable attributes
+            self.index.update_filterable_attributes([
+                'total_size',
+                'num_files',
+                'num_directories',
+                'directories',
+                'collected_at',
+                'inserted_at'
+            ])
             
-            # Files table (one-to-many with torrents)
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS files (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    torrent_id INTEGER NOT NULL,
-                    path TEXT NOT NULL,
-                    size INTEGER NOT NULL,
-                    FOREIGN KEY (torrent_id) REFERENCES torrents (id) ON DELETE CASCADE
-                )
-            """)
+            # Configure sortable attributes
+            self.index.update_sortable_attributes([
+                'total_size',
+                'num_files',
+                'collected_at',
+                'inserted_at'
+            ])
             
-            # Create indexes
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_info_hash 
-                ON torrents (info_hash)
-            """)
+            # Configure displayed attributes
+            self.index.update_displayed_attributes([
+                'info_hash',
+                'name',
+                'total_size',
+                'num_files',
+                'num_directories',
+                'files',
+                'directories',
+                'piece_length',
+                'num_pieces',
+                'comment',
+                'created_date',
+                'collected_at',
+                'inserted_at'
+            ])
             
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_torrent_id 
-                ON files (torrent_id)
-            """)
-            
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_name 
-                ON torrents (name)
-            """)
-            
-            self.conn.commit()
-            logger.info("Database tables created/verified")
+            logger.info("Index configuration updated")
             
         except Exception as e:
-            logger.error(f"Failed to create tables: {e}", exc_info=True)
-            raise
+            logger.error(f"Failed to configure index: {e}", exc_info=True)
+            # Non-fatal error, continue
+    
+    def extract_directories(self, files: List[Dict[str, Any]]) -> List[str]:
+        """Extract unique directory paths from file list.
+        
+        Args:
+            files: List of file dicts with 'path' field
+            
+        Returns:
+            List of unique directory paths
+        """
+        directories: Set[str] = set()
+        
+        for file_info in files:
+            file_path = file_info.get('path', '')
+            if file_path:
+                # Extract directory using pathlib
+                path_obj = Path(file_path)
+                
+                # Add all parent directories
+                parts = path_obj.parts
+                if len(parts) > 1:  # Has directory
+                    # Add all directory levels
+                    for i in range(len(parts) - 1):  # Exclude filename
+                        dir_path = str(Path(*parts[:i+1]))
+                        directories.add(dir_path)
+        
+        return sorted(list(directories))
     
     def insert_torrent(
         self,
@@ -95,10 +136,10 @@ class TorrentDatabase:
         collected_at: Optional[str] = None
     ) -> bool:
         """
-        Insert torrent and its files into database.
+        Insert torrent and its files into Meilisearch.
         
         Args:
-            info_hash: Torrent info hash
+            info_hash: Torrent info hash (primary key)
             name: Torrent name
             total_size: Total size in bytes
             files: List of file dicts with 'path' and 'size'
@@ -112,48 +153,52 @@ class TorrentDatabase:
             True if successful, False otherwise
         """
         try:
-            cursor = self.conn.cursor()
+            # Extract directory information
+            directories = self.extract_directories(files)
             
-            # Insert torrent
-            cursor.execute("""
-                INSERT INTO torrents (
-                    info_hash, name, total_size, piece_length, 
-                    num_pieces, comment, created_date, collected_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                info_hash, name, total_size, piece_length,
-                num_pieces, comment, created_date,
-                collected_at or datetime.utcnow().isoformat()
-            ))
+            # Prepare document for Meilisearch
+            document = {
+                'info_hash': info_hash,
+                'name': name,
+                'total_size': total_size,
+                'num_files': len(files),
+                'num_directories': len(directories),
+                'files': files,  # Store as array of objects
+                'directories': directories,  # Store extracted directories
+                'inserted_at': datetime.utcnow().isoformat(),
+                'collected_at': collected_at or datetime.utcnow().isoformat()
+            }
             
-            torrent_id = cursor.lastrowid
+            # Add optional fields
+            if piece_length is not None:
+                document['piece_length'] = piece_length
+            if num_pieces is not None:
+                document['num_pieces'] = num_pieces
+            if comment:
+                document['comment'] = comment
+            if created_date:
+                document['created_date'] = created_date
             
-            # Insert files
-            if files:
-                file_data = [
-                    (torrent_id, file['path'], file['size'])
-                    for file in files
-                ]
-                cursor.executemany("""
-                    INSERT INTO files (torrent_id, path, size)
-                    VALUES (?, ?, ?)
-                """, file_data)
+            # Add document to Meilisearch
+            task = self.index.add_documents([document])
             
-            self.conn.commit()
-            logger.info(f"Inserted torrent {info_hash}: {name} ({len(files)} files)")
-            return True
+            # Wait for task to complete (optional, for immediate feedback)
+            result = self.client.wait_for_task(task.task_uid, timeout_in_ms=5000)
             
-        except sqlite3.IntegrityError as e:
-            logger.warning(f"Duplicate torrent {info_hash}: {e}")
-            return False
+            if result.status == 'succeeded':
+                logger.info(f"Inserted torrent {info_hash}: {name} ({len(files)} files)")
+                return True
+            else:
+                logger.error(f"Failed to insert torrent {info_hash}: {result.error}")
+                return False
+            
         except Exception as e:
             logger.error(f"Failed to insert torrent {info_hash}: {e}", exc_info=True)
-            self.conn.rollback()
             return False
     
     def torrent_exists(self, info_hash: str) -> bool:
         """
-        Check if torrent already exists in database.
+        Check if torrent already exists in Meilisearch.
         
         Args:
             info_hash: Torrent info hash
@@ -162,28 +207,26 @@ class TorrentDatabase:
             True if exists, False otherwise
         """
         try:
-            cursor = self.conn.cursor()
-            cursor.execute(
-                "SELECT 1 FROM torrents WHERE info_hash = ? LIMIT 1",
-                (info_hash,)
-            )
-            return cursor.fetchone() is not None
+            document = self.index.get_document(info_hash)
+            return document is not None
+        except meilisearch.errors.MeilisearchApiError as e:
+            if e.code == 'document_not_found':
+                return False
+            logger.error(f"Error checking torrent existence: {e}", exc_info=True)
+            return False
         except Exception as e:
             logger.error(f"Error checking torrent existence: {e}", exc_info=True)
             return False
     
     def get_torrent_count(self) -> int:
-        """Get total number of torrents in database."""
+        """Get total number of torrents in Meilisearch index."""
         try:
-            cursor = self.conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM torrents")
-            return cursor.fetchone()[0]
+            stats = self.index.get_stats()
+            return stats.number_of_documents
         except Exception as e:
             logger.error(f"Error getting torrent count: {e}", exc_info=True)
             return 0
     
     def close(self):
-        """Close database connection."""
-        if self.conn:
-            self.conn.close()
-            logger.info("Database connection closed")
+        """Close Meilisearch connection (not needed, but kept for compatibility)."""
+        logger.info("Meilisearch connection closed (no-op)")
